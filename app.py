@@ -1,235 +1,450 @@
-from flask import Flask, render_template, request, send_file, jsonify
-import subprocess
+from flask import Flask, render_template, request, send_file, jsonify, make_response
+from flask_cors import CORS, cross_origin
+from groq import Groq
 from docx import Document
 import os
+import traceback
+import logging
 
 app = Flask(__name__)
 
-# -------------------------------
-# Configurable Ollama model
-# -------------------------------
-OLLAMA_MODEL = "gemma3:270m"
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # -------------------------------
-# Resume Enhancement Prompts (CAG-style)
+# Enhanced CORS configuration (FIXED)
 # -------------------------------
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:3000", "http://127.0.0.1:5000",
+                    "*"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+        "supports_credentials": True
+    }
+})
+
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,Accept,X-Requested-With")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        return response
+
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    return response
+
+
+# -------------------------------
+# Groq API Configuration (FIXED)
+# -------------------------------
+# FIXED: Direct API key assignment instead of using os.getenv with the key itself
+GROQ_API_KEY = "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"
+
+# FIXED: Use a known working model
+GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # Changed from the non-existent model
+
+# Test Groq connection
+client = None
+if GROQ_API_KEY:
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        # Test the connection with a simple request
+        test_response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": "Hello"}],
+            max_tokens=5
+        )
+        logger.info(f"✅ Groq API connection successful with model: {GROQ_MODEL}")
+        print(f"✅ Groq API Key loaded and tested successfully")
+        print(f"✅ Model: {GROQ_MODEL}")
+    except Exception as e:
+        logger.error(f"❌ Groq API connection failed: {e}")
+        print(f"❌ Groq API connection failed: {e}")
+        client = None
+else:
+    logger.error("❌ No GROQ_API_KEY found")
+    print("❌ No GROQ_API_KEY found")
+
+# -------------------------------
+# Resume Enhancement Prompts
+# -------------------------------
+GLOBAL_RULE = (
+    "Global Resume Rules:\n"
+    "1. Use professional, employer-focused tone.\n"
+    "2. Do not use first-person pronouns.\n"
+    "3. Be concise, quantifiable, and clear.\n"
+    "4. Fix grammar, avoid redundancy.\n"
+    "5. Do not invent experiences or education.\n"
+)
 
 resume_prompts = {
-    "summary": (
-        "You are an expert resume consultant and professional proofreader. "
-        "Enhance the Professional Summary/Objective for a user. "
-        "Correct any spelling mistakes and improve clarity, conciseness, and employer focus. "
-        "Do NOT add any experience the user does not have. "
-        "If the text is already correct, polish style and readability without changing meaning. "
-        "If the input is empty, return a neutral, professional summary template. "
-        "Limit the summary to approximately 50-70 words, adjusting naturally to the input length. "
-        "Always produce a polished, professional, and improved version of the content, even if the input is short or average. "
-        "Use a confident, professional tone suitable for resumes. "
-        "Return only the improved and corrected text with no prefixes, headings, or commentary."
-    ),
-
-    "experience": (
-        "You are an expert resume consultant and professional proofreader. "
-        "Enhance the Work Experience section to highlight achievements, responsibilities, and measurable impact. "
-        "Correct any spelling mistakes. "
-        "Use action verbs and quantify results where possible. "
-        "Do NOT add any experience the user does not have. "
-        "Limit the section to approximately 70-120 words, adjusting naturally to the input length. "
-        "Always produce a polished, professional version. "
-        "Return only one improved version with no prefixes, headings, or commentary."
-    ),
-
-    "skills": (
-        "You are an expert resume consultant and professional proofreader. "
-        "Improve the Skills section to be concise, organized, and impressive. "
-        "Correct any spelling mistakes. "
-        "Group skills logically, include technical and soft skills, and remove redundancy. "
-        "Do NOT add any skills the user does not have. "
-        "Return one comma-separated list with no prefixes or headings."
-    ),
-
-    "education": (
-        "You are an expert resume consultant and professional proofreader. "
-        "Rewrite the Education section to clearly present degrees, certifications, and relevant coursework. "
-        "Correct any spelling mistakes. "
-        "Focus on what supports the user's career goals. "
-        "Do NOT add any degrees or certifications the user does not have. "
-        "Limit the section to approximately 50-100 words, adjusting naturally to input length. "
-        "Return only one improved version with no prefixes or headings."
-    ),
-
-    "projects": (
-        "You are an expert resume consultant and professional proofreader. "
-        "Enhance the Projects section to present scope, technologies, contributions, and measurable impact. "
-        "Correct any spelling mistakes. "
-        "Do NOT add any projects the user has not completed. "
-        "Limit the section to approximately 50-100 words, adjusting naturally to input length. "
-        "Return only one polished version with no prefixes or headings."
-    ),
-
-    "certifications": (
-        "You are an expert resume consultant and professional proofreader. "
-        "Improve the Certifications section to highlight relevant certifications and their impact. "
-        "Correct any spelling mistakes. "
-        "Do NOT add any certifications the user does not have. "
-        "Limit the section to approximately 30-60 words, adjusting naturally to input length. "
-        "Return only one improved version with no prefixes or headings."
-    ),
-
-    "achievements": (
-        "You are an expert resume consultant and professional proofreader. "
-        "Enhance the Achievements section to highlight awards, recognitions, or accomplishments. "
-        "Correct any spelling mistakes. "
-        "Do NOT add any achievements the user does not have. "
-        "Limit the section to approximately 40-80 words, adjusting naturally to input length. "
-        "Return one concise, quantifiable, professional version with no prefixes or headings."
-    ),
-
-    "hobbies": (
-        "You are an expert resume consultant and professional proofreader. "
-        "Improve the Hobbies/Interests section to be professional, relevant, and reflective of skills. "
-        "Correct any spelling mistakes. "
-        "Do NOT add hobbies the user does not have. "
-        "Limit the section to approximately 20-50 words, adjusting naturally to input length. "
-        "Return only one improved version with no prefixes or headings."
-    )
+    "summary": "Rewrite the Professional Summary concisely (50–70 words).",
+    "experience": "Rewrite Work Experience emphasizing achievements and measurable outcomes (70–120 words).",
+    "skills": "Rewrite Skills as a concise, comma-separated list.",
+    "education": "Rewrite Education highlighting degrees, certifications, or distinctions (50–100 words).",
+    "projects": "Rewrite Projects highlighting scope, technologies, and results (50–100 words).",
+    "certifications": "Rewrite Certifications to emphasize relevance (30–60 words).",
+    "achievements": "Rewrite Achievements with measurable impact (40–80 words).",
+    "hobbies": "Rewrite Hobbies/Interests professionally (20–50 words)."
 }
+
+
 # -------------------------------
 # Helper Functions
 # -------------------------------
 def enhance_section(section_name, user_input):
-    """Enhance a resume section using Ollama (CAG approach)"""
-    if not user_input.strip():
-        return user_input
+    """Enhance resume section via Groq"""
+    logger.debug(f"Enhancing section: {section_name}")
 
-    section_key = section_name.lower()
-    if section_key not in resume_prompts:
-        return user_input
+    if not user_input or not user_input.strip():
+        logger.warning(f"Empty input for section: {section_name}")
+        return f"[{section_name.title()} section not provided.]"
 
-    combined_prompt = f"{resume_prompts[section_key]}\n\nUser Input:\n{user_input}\n\nImproved Content:"
+    if not client:
+        logger.error("Groq client not available")
+        return user_input.strip()
+
+    prompt = f"{GLOBAL_RULE}\n\n{resume_prompts.get(section_name.lower(), '')}\n\nUser Input:\n{user_input}\n\nEnhanced Content:"
 
     try:
-        result = subprocess.run(
-            ["ollama", "run", OLLAMA_MODEL, combined_prompt],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=60
+        logger.debug(f"Sending request to Groq for section: {section_name}")
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system",
+                 "content": "You are an expert resume consultant. Improve the given content while keeping it truthful and professional."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=800
         )
-        enhanced_text = result.stdout.strip()
 
-        # Remove any common prefixes or headings
-        prefixes = [
-            f"{section_name.title()}:",
-            f"{section_name.upper()}:",
-            "Summary:",
-            "Improved Content:",
-            "Enhanced:",
-            "Here is the improved text:",
-            "Here's the enhanced version:",
-            ##"Here's a polished and concise resume summary/objective tailored for a user:"
-        ]
-        for p in prefixes:
-            if enhanced_text.startswith(p):
-                enhanced_text = enhanced_text[len(p):].strip()
+        enhanced_content = response.choices[0].message.content.strip()
+        logger.info(f"Successfully enhanced section: {section_name}")
+        return enhanced_content
 
-        # Remove markdown bullets or extra asterisks
-        enhanced_text = enhanced_text.replace("*", "").strip()
-
-        return enhanced_text if enhanced_text else user_input
-
-    except subprocess.TimeoutExpired:
-        print(f" Timeout enhancing {section_name}")
-        return user_input
-    except subprocess.CalledProcessError as e:
-        print(f"Ollama error for {section_name}: {e.stderr}")
-        return user_input
     except Exception as e:
-        print(f"Unexpected error enhancing {section_name}: {str(e)}")
-        return user_input
+        logger.error(f"Groq API failed for section {section_name}: {e}")
+        print(f"[ERROR] Groq API failed: {e}")
+        traceback.print_exc()
+        return user_input.strip()
 
 
 def save_resume_docx(enhanced_resume, filename="Enhanced_Resume.docx"):
     """Save enhanced resume to DOCX file"""
-    doc = Document()
-    doc.add_heading("Enhanced Resume", 0)
-    for section, text in enhanced_resume.items():
-        if text:
-            doc.add_heading(section.title(), level=1)
-            doc.add_paragraph(text)
-    doc.save(filename)
-    return filename
+    try:
+        logger.debug(f"Creating DOCX file: {filename}")
+        doc = Document()
+        doc.add_heading("Enhanced Resume", 0)
+
+        for section, text in enhanced_resume.items():
+            if text and text.strip() and not text.startswith('[') and not text.endswith('not provided.]'):
+                doc.add_heading(section.title(), level=1)
+
+                # Handle multi-line content
+                paragraphs = text.split('\n')
+                for paragraph in paragraphs:
+                    if paragraph.strip():
+                        doc.add_paragraph(paragraph.strip())
+
+        doc.save(filename)
+        logger.info(f"DOCX file saved successfully: {filename}")
+        return filename
+    except Exception as e:
+        logger.error(f"Failed to create DOCX: {str(e)}")
+        print(f"[ERROR] Failed to create DOCX: {str(e)}")
+        raise
+
 
 # -------------------------------
 # Flask Routes
 # -------------------------------
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
 def index():
-    enhanced_resume = {}
-    download_file = None
+    logger.info("Serving index page")
+    return render_template("index.html")
 
-    if request.method == "POST":
-        for section in resume_prompts.keys():
-            user_input = request.form.get(section, "")
-            if user_input.strip():
-                enhanced_text = enhance_section(section, user_input)
-                if enhanced_text:
-                    enhanced_resume[section] = enhanced_text
 
-        if enhanced_resume:
-            download_file = save_resume_docx(enhanced_resume)
-
-    return render_template("index.html", enhanced_resume=enhanced_resume, download_file=download_file)
-
-@app.route("/enhance", methods=["POST"])
+@app.route("/enhance", methods=["POST", "OPTIONS"])
+@cross_origin()
 def enhance_ajax():
-    """AJAX endpoint for individual section enhancement"""
+    if request.method == "OPTIONS":
+        logger.debug("Handling OPTIONS request for /enhance")
+        return "", 200
+
+    logger.info("Processing enhance request")
+
     try:
+        # Log request details
+        logger.debug(f"Content-Type: {request.content_type}")
+        logger.debug(f"Method: {request.method}")
+        logger.debug(f"Is JSON: {request.is_json}")
+
+        if not request.is_json:
+            logger.error("Request is not JSON")
+            return jsonify({'success': False, 'error': 'Content-Type must be application/json'}), 400
+
         data = request.get_json()
+        if not data:
+            logger.error("No JSON data received")
+            return jsonify({'success': False, 'error': 'No data received'}), 400
+
+        logger.debug(f"Request data: {data}")
+
         section_name = data.get('section')
         content = data.get('content')
 
-        if not section_name or not content:
-            return jsonify({'success': False, 'error': 'Missing section name or content'}), 400
+        if not section_name:
+            logger.error("Missing section name")
+            return jsonify({'success': False, 'error': 'Missing section name'}), 400
 
-        enhanced_content = enhance_section(section_name, content)
+        if not client:
+            logger.error("Groq client not available")
+            return jsonify({'success': False,
+                            'error': 'AI enhancement service not available. Please check server configuration.'}), 500
 
-        return jsonify({'success': True, 'enhanced_content': enhanced_content, 'section': section_name})
+        logger.info(f"Enhancing section: {section_name}")
+        enhanced_content = enhance_section(section_name, content or "")
+
+        response_data = {
+            'success': True,
+            'enhanced_content': enhanced_content,
+            'section': section_name
+        }
+
+        logger.info(f"Enhancement successful for section: {section_name}")
+        return jsonify(response_data)
 
     except Exception as e:
+        logger.error(f"Enhancement error: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
+
+
+@app.route("/generate_resume", methods=["POST", "OPTIONS"])
+@cross_origin()
+def generate_resume():
+    if request.method == "OPTIONS":
+        logger.debug("Handling OPTIONS request for /generate_resume")
+        return "", 200
+
+    logger.info("Processing generate_resume request")
+
+    try:
+        data = request.get_json()
+        if not data:
+            logger.error("No data received for resume generation")
+            return jsonify({'success': False, 'error': 'No data received'}), 400
+
+        logger.debug(f"Resume data received: {list(data.keys())}")
+        enhanced_resume = {}
+
+        # Personal info
+        personal_info = data.get('personal', {})
+        if personal_info:
+            contact_info = []
+            for field in ['email', 'phone', 'location', 'linkedin']:
+                if personal_info.get(field):
+                    contact_info.append(personal_info[field])
+            if contact_info:
+                enhanced_resume['Contact Information'] = ' | '.join(contact_info)
+
+            if personal_info.get('fullName'):
+                enhanced_resume['Name'] = personal_info['fullName']
+
+            if personal_info.get('summary'):
+                enhanced_resume['Professional Summary'] = enhance_section("summary", personal_info['summary'])
+
+        # Experience
+        experiences = data.get('experiences', [])
+        if experiences:
+            exp_content = []
+            for exp in experiences:
+                if any([exp.get('title'), exp.get('company'), exp.get('description')]):
+                    exp_text = f"{exp.get('title', 'Position')} - {exp.get('company', 'Company')}"
+                    if exp.get('startDate') or exp.get('endDate'):
+                        start = exp.get('startDate', '')
+                        end = exp.get('endDate', 'Present') if not exp.get('current', False) else 'Present'
+                        exp_text += f" ({start} - {end})"
+                    if exp.get('description'):
+                        exp_text += f"\n{exp.get('description')}"
+                    exp_content.append(exp_text)
+            if exp_content:
+                enhanced_resume['Work Experience'] = enhance_section("experience", '\n\n'.join(exp_content))
+
+        # Education
+        education = data.get('education', [])
+        if education:
+            edu_content = []
+            for edu in education:
+                if any([edu.get('degree'), edu.get('field'), edu.get('institution')]):
+                    edu_text = f"{edu.get('degree', '')} in {edu.get('field', '')}"
+                    if edu.get('institution'):
+                        edu_text += f" - {edu.get('institution')}"
+                    if edu.get('year'):
+                        edu_text += f" ({edu.get('year')})"
+                    if edu.get('details'):
+                        edu_text += f"\n{edu.get('details')}"
+                    edu_content.append(edu_text)
+            if edu_content:
+                enhanced_resume['Education'] = enhance_section("education", '\n\n'.join(edu_content))
+
+        # Skills
+        if data.get('skills'):
+            enhanced_resume['Skills'] = enhance_section("skills", data['skills'])
+
+        # Projects
+        if data.get('projects'):
+            enhanced_resume['Projects'] = enhance_section("projects", data['projects'])
+
+        if not enhanced_resume:
+            logger.warning("No content to generate resume")
+            return jsonify({'success': False, 'error': 'No content provided to generate resume'}), 400
+
+        filename = save_resume_docx(enhanced_resume)
+        logger.info(f"Resume generated successfully: {filename}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Resume generated successfully',
+            'filename': filename
+        })
+
+    except Exception as e:
+        logger.error(f"Resume generation error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Failed to generate resume: {str(e)}'}), 500
+
 
 @app.route("/download")
 def download():
     filename = "Enhanced_Resume.docx"
+    logger.info(f"Download request for: {filename}")
+
     if os.path.exists(filename):
-        return send_file(filename, as_attachment=True)
-    return "File not found.", 404
+        try:
+            return send_file(filename, as_attachment=True, download_name=filename)
+        except Exception as e:
+            logger.error(f"Download error: {str(e)}")
+            return jsonify({"error": f"Download failed: {str(e)}"}), 500
+    else:
+        logger.error(f"File not found: {filename}")
+        return jsonify({"error": "File not found. Please generate a resume first."}), 404
+
 
 @app.route("/health")
-def health_check():
-    """Check Ollama and model availability"""
-    try:
-        result = subprocess.run(["ollama", "list"], capture_output=True, text=True, check=True)
-        model_available = OLLAMA_MODEL in result.stdout
-        return jsonify({'status': 'healthy', 'ollama_running': True, 'model_available': model_available})
-    except Exception as e:
-        return jsonify({'status': 'unhealthy', 'ollama_running': False, 'error': str(e)}), 500
+def health():
+    logger.info("Health check requested")
+
+    health_status = {
+        'status': 'healthy',
+        'groq_configured': bool(client),
+        'groq_api_key_present': bool(GROQ_API_KEY),
+        'model': GROQ_MODEL,
+        'endpoints': ['/enhance', '/generate_resume', '/download', '/health'],
+        'server_time': str(__import__('datetime').datetime.now())
+    }
+
+    # Test Groq connection
+    if client:
+        try:
+            test_response = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=1
+            )
+            health_status['groq_status'] = 'connected'
+        except Exception as e:
+            health_status['groq_status'] = f'error: {str(e)}'
+            health_status['status'] = 'degraded'
+    else:
+        health_status['groq_status'] = 'not_configured'
+        health_status['status'] = 'degraded'
+
+    logger.info(f"Health status: {health_status['status']}")
+    return jsonify(health_status)
+
+
+@app.route("/test", methods=["GET", "POST"])
+def test_endpoint():
+    """Simple test endpoint for debugging"""
+    logger.info(f"Test endpoint hit with method: {request.method}")
+
+    if request.method == "POST":
+        try:
+            data = request.get_json()
+            logger.debug(f"Test POST data: {data}")
+            return jsonify({
+                'success': True,
+                'message': 'Test endpoint working',
+                'received_data': data,
+                'method': 'POST'
+            })
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'method': 'POST'
+            })
+    else:
+        return jsonify({
+            'success': True,
+            'message': 'Test endpoint working',
+            'method': 'GET',
+            'server_status': 'running'
+        })
+
 
 # -------------------------------
 # Error Handlers
 # -------------------------------
 @app.errorhandler(404)
-def not_found(error):
-    return render_template('index.html'), 404
+def not_found_error(error):
+    logger.warning(f"404 error for path: {request.path}")
+    return jsonify({'error': 'Endpoint not found', 'path': request.path}), 404
+
 
 @app.errorhandler(500)
 def internal_error(error):
+    logger.error(f"500 error: {str(error)}")
     return jsonify({'error': 'Internal server error'}), 500
 
+
+@app.errorhandler(405)
+def method_not_allowed(error):
+    logger.warning(f"405 error: Method {request.method} not allowed for {request.path}")
+    return jsonify({'error': f'Method {request.method} not allowed'}), 405
+
+
 # -------------------------------
-# Main
+# Run Server
 # -------------------------------
 if __name__ == "__main__":
-    print("Starting Flask app on http://localhost:5000")
+    print("=" * 60)
+    print("🚀 Starting Resume Builder (Groq-powered)")
+    print("=" * 60)
+    print(f"📡 Server running at: http://localhost:5000")
+    print(f"🤖 Model: {GROQ_MODEL}")
+    print(f"🔑 API Key: {'✅ Configured' if GROQ_API_KEY else '❌ Missing'}")
+    print(f"🔗 Groq Client: {'✅ Connected' if client else '❌ Failed'}")
+    print("=" * 60)
+    print("📍 Available endpoints:")
+    print("   GET  /              - Frontend")
+    print("   GET  /health        - Health check")
+    print("   POST /enhance       - AI enhancement")
+    print("   POST /generate_resume - Generate DOCX")
+    print("   GET  /download      - Download resume")
+    print("   GET/POST /test      - Test endpoint")
+    print("=" * 60)
+
     app.run(debug=True, host='0.0.0.0', port=5000)
