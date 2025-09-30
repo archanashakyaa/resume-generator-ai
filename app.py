@@ -52,58 +52,77 @@ GLOBAL_RULES = [
     "Be concise, quantifiable, and clear.",
     "Fix grammar, avoid redundancy.",
     "Do not invent experiences or education.",
-    "Do not output anything else other than the output that goes inside a particular section. no commentaries of any sort."
+    "Do not output anything else other than the output that goes inside a particular section; no commentaries of any sort."
 ]
 
 GLOBAL_RULE = "Global Resume Rules:\n" + "\n".join(f"{i + 1}. {rule}" for i, rule in enumerate(GLOBAL_RULES)) + "\n"
 
 resume_prompts = {
+
     "summary": (
         "Role: Expert Resume Consultant\n"
-        "Objective: Improve the Professional Summary section.\n"
-        "Instruction 1: Rewrite the summary in 50–70 words.\n"
-        "Instruction 2: Highlight key strengths, career goals, and adaptability.\n"
-        "Instruction 3: Ensure the tone is employer-focused and concise.\n"
-        "Instruction 4: Return only the single best version for the resume.\n"
+        "Objective: Craft a highly professional, targeted Resume Summary.\n"
+        "Instruction 1: Rewrite the summary in 50–70 words (2–4 concise sentences).\n"
+        "Instruction 2: Start with the professional title and years of relevant experience.\n"
+        "Instruction 3: Highlight top skills, key strengths, career goals, and 1–2 measurable achievements if possible.\n"
+        "Instruction 4: Use strong, varied, and descriptive professional adjectives (e.g., results-driven, dynamic, dedicated, strategic, proactive, detail-oriented) to convey expertise and impact, while maintaining a factual, concise, and highly professional tone.\n"
+        "Instruction 5: Tailor language to align with the targeted job description and ATS keywords.\n"
+        "Instruction 6: Avoid first-person pronouns, personal opinions, or unnecessary details.\n"
+        "Instruction 7: Ensure clarity, grammatical accuracy, and conciseness.\n"
+        "Instruction 8: Return only the single best, polished version for the resume.\n"
         "Notes: Follow all Global Resume Rules."
     ),
     "experience": (
         "Role: Expert Resume Consultant\n"
         "Objective: Enhance the Work Experience section.\n"
         "Instruction 1: Rewrite experience in 70–120 words.\n"
-        "Instruction 2: Emphasize measurable outcomes and use action verbs.\n"
-        "Instruction 3: Quantify results and highlight transferable skills.\n"
-        "Instruction 4: Return only the single best version for the resume.\n"
+        "Instruction 2: Use 3–5 bullet points per role; start each bullet with a strong action verb (e.g., Managed, Led, Improved).\n"
+        "Instruction 3: Quantify achievements wherever possible; emphasize measurable outcomes and transferable skills.\n"
+        "Instruction 4: Ensure ATS-friendly plain-text bullets (dash or •), avoid +, *, or markdown symbols.\n"
+        "Instruction 5: Return only the single best version for the resume.\n"
         "Notes: Follow all Global Resume Rules."
     ),
     "skills": (
         "Role: Expert Resume Consultant\n"
-        "Objective: Refine the Skills section.\n"
-        "Instruction 1: Rewrite as a concise, comma-separated list.\n"
-        "Instruction 2: Group skills logically and include both technical and soft skills.\n"
-        "Instruction 3: Remove redundancy.\n"
-        "instruction 4: out should be comma separated.\n"
-        "Instruction 5: Return only the single best version for the resume.\n"
+        "Objective: Refine the Skills section for ATS optimization and employer appeal.\n"
+        "Instruction 1: Rewrite as a concise list, limited to 10–15 core skills, using comma-separated format or grouped categories (e.g., Technical Skills, Soft Skills, Certifications).\n"
+        "Instruction 2: Prioritize hard skills, technical competencies, certifications, and industry-specific terminology mentioned in the job description.\n"
+        "Instruction 3: Use exact keywords and phrases from the posting, including both spelled-out and acronym forms (e.g., Search Engine Optimization (SEO)).\n"
+        "Instruction 4: Avoid vague or outdated terms; keep all skills current, specific, and relevant to the targeted job.\n"
+        "Instruction 5: Eliminate redundancy and ensure logical grouping for easy readability.\n"
+        "Instruction 6: Integrate the most critical skills naturally in both this section and throughout work experience, avoiding keyword stuffing.\n"
+        "Instruction 7: Ensure formatting is consistent, professional, and ATS-friendly.\n"
+        "Instruction 8: Return only the single best version for the resume.\n"
         "Notes: Follow all Global Resume Rules."
+
     ),
     "education": (
         "Role: Expert Resume Consultant\n"
         "Objective: Improve the Education section.\n"
         "Instruction 1: Rewrite in 50–100 words.\n"
-        "Instruction 2: Clearly present degrees, certifications, and relevant coursework.\n"
-        "Instruction 3: Focus on what supports career goals.\n"
+        "Instruction 2: Clearly present degree, university/college, dates, certifications, and relevant coursework.\n"
+        "Instruction 3: Focus on what supports career goals; concise and factual sentences.\n"
         "Instruction 4: Return only the single best version for the resume.\n"
         "Notes: Follow all Global Resume Rules."
     ),
     "projects": (
         "Role: Expert Resume Consultant\n"
-        "Objective: Enhance the Projects section.\n"
-        "Instruction 1: Rewrite in 50–100 words.\n"
-        "Instruction 2: Highlight scope, technologies, contributions, and results.\n"
-        "Instruction 3: Return only the single best version for the resume.\n"
+        "Objective: Enhance the Projects section to maximize relevance, clarity, and measurable impact for ATS and hiring managers.\n"
+        "Instruction 1: Include Project Name, Role, and Dates/Duration.\n"
+        "Instruction 2: List only projects relevant to the targeted job, prioritizing by impact.\n"
+        "Instruction 3: Clearly state technologies, tools, or skills used (optional but recommended).\n"
+        "Instruction 4: Use 50–100 words per project; provide concise bullet points for contributions, responsibilities, and achievements.\n"
+        "Instruction 5: Start bullets with strong action verbs; apply PAR formula (Problem, Action, Result) wherever possible.\n"
+        "Instruction 6: Quantify results and achievements with numbers, percentages, or measurable outcomes.\n"
+        "Instruction 7: Include hyperlinks to online projects or portfolios with clean, descriptive text.\n"
+        "Instruction 8: Use plain-text bullets (dash - or •); avoid +, *, or markdown formatting.\n"
+        "Instruction 9: Keep language clear, professional, and tailored to the job description.\n"
+        "Instruction 10: Limit bullets to 3–5 per project; ensure ATS-friendly formatting.\n"
+        "Instruction 11: Return only the single best version for the resume.\n"
         "Notes: Follow all Global Resume Rules."
-    ),
+    )
 }
+
 
 
 def _safe_response_content(response):
