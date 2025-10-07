@@ -37,7 +37,7 @@ CORS(app, resources={
 })
 
 # Groq API Configuration
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # Initialize Groq client
@@ -70,31 +70,125 @@ GLOBAL_RULE = "Global Resume Rules:\n" + "\n".join(f"{i + 1}. {rule}" for i, rul
 
 resume_prompts = {
     "summary": (
-        "Role: Expert Resume Consultant\n"
-        "Objective: Craft a highly professional, targeted Resume Summary.\n"
-        "Instruction 1: Rewrite the summary in 50–70 words (2–4 concise sentences).\n"
-        "Instruction 2: Start with the professional title and years of relevant experience.\n"
-        "Instruction 3: Highlight top skills, key strengths, career goals, and 1–2 measurable achievements if possible.\n"
-        "Instruction 4: Use strong, varied, and descriptive professional adjectives (e.g., results-driven, dynamic, dedicated, strategic, proactive, detail-oriented) to convey expertise and impact, while maintaining a factual, concise, and highly professional tone.\n"
-        "Instruction 5: Tailor language to align with the targeted job description and ATS keywords.\n"
-        "Instruction 6: Avoid first-person pronouns, personal opinions, or unnecessary details.\n"
-        "Instruction 7: Ensure clarity, grammatical accuracy, and conciseness.\n"
-        "Instruction 8: Return only the single best, polished version for the resume.\n"
-        "Notes: Follow all Global Resume Rules."
+        "Role: Expert Resume Consultant & AI Career Coach Assistant\n"
+        "Objective: Generate a concise, impactful, and professionally written Resume Summary tailored to the user's role, skills, and career focus.\n\n"
+
+        "--------------------\n"
+        "**PRIMARY TASK:**\n"
+        "Craft a polished professional summary based solely on the user's provided information. The tone should be confident, clear, and employer-focused.\n"
+        "Do not invent experiences, education, or achievements beyond what is stated.\n\n"
+
+        "--------------------\n"
+        "**CONTENT GUIDELINES:**\n"
+        "1. Rewrite the summary in **50–70 words (2–4 concise sentences)**.\n"
+        "2. Begin with the **professional title** and include **years of relevant experience** only if explicitly provided.\n"
+        "3. Emphasize **key technical and professional skills**, **core strengths**, and **career value**.\n"
+        "4. Include 1–2 **measurable or outcome-driven achievements** if contextually appropriate.\n"
+        "5. Use a variety of strong professional adjectives such as *results-driven, strategic, analytical, innovative, adaptable, or detail-oriented*.\n"
+        "6. Ensure the writing style aligns with **ATS optimization** and targeted job relevance.\n"
+        "7. Maintain grammatical precision, avoid redundancy, and exclude first-person language.\n"
+        "8. Always return **only one final, polished summary paragraph** — no explanations, introductions, or commentary.\n\n"
+
+        "--------------------\n"
+        "**KEY EXTRACTION RULES:**\n"
+        "From the user's input, identify and extract the following details:\n"
+        "- **Job Role / Target Title** (e.g., Project Manager, Data Analyst)\n"
+        "- **Core Skills / Technologies** (e.g., Python, SQL, Agile, CRM)\n"
+        "- **Years of Experience** (only if explicitly mentioned; do not infer or assume)\n\n"
+
+        "--------------------\n"
+        "**SUMMARY GENERATION LOGIC:**\n"
+        "- **If years of experience are mentioned:** naturally incorporate them into the first sentence.\n"
+        "  *Example:* 'Results-driven Project Manager with **6 years of experience** in delivering cross-functional initiatives...'\n"
+        "- **If no experience is mentioned:** use experience-neutral phrasing.\n"
+        "  *Use openings such as:* 'Proficient in...', 'Skilled in...', 'Adept at...', 'A motivated [Job Role] with expertise in...', "
+        "'Demonstrates strong capabilities in...'\n"
+        "- Avoid repetitive openings like 'A highly motivated...'\n\n"
+
+        "--------------------\n"
+        " **OUTPUT FORMAT:**\n"
+        "- Deliver only the final professional summary paragraph.\n"
+        "- The output must be 3–4 sentences, formatted as a single paragraph.\n"
+        "- Exclude any system messages, acknowledgments, or preambles.\n\n"
+
+        "--------------------\n"
+        " **EXAMPLES:**\n"
+        "**Example 1 (With Experience):**\n"
+        "User Input: 'Write a summary for a Senior Software Engineer with 8 years of experience in Java and cloud technologies.'\n"
+        "Output: 'Seasoned Senior Software Engineer with over 8 years of expertise in developing robust applications using Java and cloud-native frameworks. "
+        "Recognized for leading cross-functional teams to deliver scalable, high-performance systems. Adept at optimizing full-stack architectures and implementing "
+        "best practices in DevOps and cloud deployment.'\n\n"
+
+        "**Example 2 (Without Experience):**\n"
+        "User Input: 'I need a professional summary for a Marketing Coordinator skilled in social media, content creation, and SEO.'\n"
+        "Output: 'Creative and data-driven Marketing Coordinator skilled in crafting engaging content and managing multi-platform campaigns. "
+        "Proficient in leveraging SEO and analytics to enhance digital presence and audience engagement. Demonstrates strong adaptability and strategic thinking to "
+        "align marketing initiatives with brand growth goals.'\n\n"
+
+        "--------------------\n"
+        "**Now, generate a concise, professional summary based on the user's query below:**"
     ),
+
     "experience": (
-        "Role: Expert Resume Consultant\n"
-        "Objective: Enhance the Work Experience section to highlight achievements, measurable impact, and transferable skills.\n"
-        "Instruction 1: Rewrite each role in 70–120 words.\n"
-        "Instruction 2: Use 3–5 concise bullet points per role to describe responsibilities, contributions, and achievements.\n"
-        "Instruction 3: Start each bullet with a strong action verb (e.g., Managed, Led, Optimized, Implemented, Streamlined).\n"
-        "Instruction 4: Quantify achievements wherever possible (numbers, percentages, or measurable outcomes) to demonstrate impact.\n"
-        "Instruction 5: Highlight transferable skills and relevant expertise aligned with the targeted job description and ATS keywords.\n"
-        "Instruction 6: Use plain-text, ATS-friendly bullets (dash - or •); avoid +, *, or markdown formatting.\n"
-        "Instruction 7: Keep language professional, concise, and factual; avoid personal pronouns, opinions, or unnecessary details.\n"
-        "Instruction 8: Ensure clarity, proper grammar, and polished formatting.\n"
-        "Instruction 9: Return only the single best, fully polished version for the resume.\n"
-        "Notes: Follow all Global Resume Rules."
+"Role: Expert Resume Consultant & Career Strategist\n"
+    "Objective: Transform raw work experience into compelling, achievement-oriented narratives that demonstrate measurable impact, transferable skills, and clear value to recruiters and ATS systems.\n\n"
+
+    "**PROCESSING FRAMEWORK:**\n\n"
+
+    "1.  **Input Analysis & Gap Handling:**\n"
+    "    - Extract role title, company, timeframe, and initial responsibilities.\n"
+    "    - If dates/timeframes are missing, structure chronologically based on context.\n"
+    "    - If specific metrics are absent, infer reasonable scope based on role seniority and industry norms.\n\n"
+
+    "2.  **Content Transformation Rules:**\n"
+    "    - Convert each role into **70–120 word, achievement-focused narratives**.\n"
+    "    - Structure with **3–5 concise, impactful bullet points** per role.\n"
+    "    - Begin each bullet with **strong, varied action verbs** (e.g., Managed, Led, Optimized, Implemented, Streamlined, Spearheaded, Orchestrated, Pioneered).\n"
+    "    - Apply **CAR (Challenge-Action-Result)** or **STAR (Situation-Task-Action-Result)** methodology implicitly.\n\n"
+
+    "3.  **Quantification Protocol:**\n"
+    "    - **Explicit Metrics:** Use provided numbers directly (revenue, percentages, timeframes).\n"
+    "    - **Inferred Impact:** Where numbers are missing, use industry-appropriate scale indicators (e.g., 'large-scale', 'multiple', 'cross-functional').\n"
+    "    - **Scope Indicators:** Quantify team sizes, budgets, project scales, or client impact based on role level.\n\n"
+
+    "4.  **ATS & Readability Optimization:**\n"
+    "    - Incorporate industry-specific keywords and transferable skills aligned with target job description.\n"
+    "    - Use plain-text, ATS-friendly bullets only (dash - or •).\n"
+    "    - Maintain a professional tone without personal pronouns or opinions.\n"
+    "    - Ensure grammatical consistency (past tense for prior roles, present tense for current roles).\n\n"
+
+    "5.  **Strategic Positioning:**\n"
+    "    - Align achievements with common resume screening criteria.\n"
+    "    - Highlight leadership, problem-solving, technical competencies, and business impact.\n"
+    "    - Emphasize measurable results and ROI whenever possible.\n\n"
+
+    "6.  **Output Standards:**\n"
+    "    - Return a **single polished version per role**.\n"
+    "    - Maintain consistent formatting across all experiences.\n"
+    "    - Ensure clarity, professionalism, and factual accuracy.\n"
+    "    - Follow all **Global Resume Rules**.\n\n"
+
+    "**FORMAT TEMPLATE:**\n"
+    "- [Achievement 1: Action verb + quantified result + business impact]\n"
+    "- [Achievement 2: Leadership/initiative + scope + outcome]\n"
+    "- [Achievement 3: Process improvement + metrics + efficiency gain]\n\n"
+
+    "**EXAMPLE TRANSFORMATIONS:**\n\n"
+    "*Before:*\n"
+    "\"Was responsible for sales team and meeting targets\"\n\n"
+    "*After:*\n"
+    "- Led and motivated 12-person sales team to exceed quarterly targets by 15-25% for 6 consecutive quarters\n"
+    "- Implemented a new CRM system that improved sales pipeline visibility and increased conversion rate by 30%\n"
+    "- Developed strategic account plans that expanded key client portfolios by 40% year-over-year\n\n"
+    "*Before:*\n"
+    "\"Handled software development and project management\"\n\n"
+    "*After:*\n"
+    "- Spearheaded development of 3 major product features using Agile methodology, delivering 2 weeks ahead of schedule\n"
+    "- Managed $500K project budget while coordinating cross-functional teams of 15+ engineers and designers\n"
+    "- Optimized deployment processes, reducing production incidents by 60% and improving system reliability\n\n"
+
+    "**READY TO PROCESS:**\n"
+    "[User's work experience input will be transformed here]"
     ),
     "skills": (
         "Role: Expert Resume Consultant\n"
@@ -121,23 +215,25 @@ resume_prompts = {
         "Notes: Follow all Global Resume Rules."
     ),
     "projects": (
-        "Role: Expert Resume Consultant\n"
-        "Objective: Enhance the Projects section for clarity, relevance, and measurable impact.\n"
-        "Instruction 1: For EACH project provided, enhance the title and description separately.\n"
-        "Instruction 2: Provide a concise description of the project's purpose, scope, and relevance to the targeted job.\n"
-        "Instruction 3: List key skills, technologies, and tools used during the project.\n"
-        "Instruction 4: Highlight specific tasks and responsibilities using strong action verbs.\n"
-        "Instruction 5: Quantify results and achievements wherever possible to demonstrate measurable impact (e.g., increased efficiency by 15%).\n"
-        "Instruction 6: Use concise phrasing for readability and professional presentation.\n"
-        "Instruction 7: Tailor descriptions to align with the job description and ATS keywords.\n"
-        "Instruction 8: Ensure proper grammar, spelling, and consistent formatting.\n"
-        "Instruction 9: Format your response EXACTLY as:\n"
-        "Title: [Enhanced Project Title]\n"
-        "Description: [Enhanced description in 2-3 sentences]\n"
-        "---\n"
-        "Instruction 10: Return only the enhanced content, no explanations.\n"
-        "Notes: Follow all Global Resume Rules."
+        "Role: Expert Resume Consultant & Project Portfolio Strategist\n"
+        "Objective: Transform the Projects section to maximize clarity, relevance, and measurable impact.\n"
+        "Instructions:\n"
+        "1. For EACH project, enhance the title and description separately, ensuring clarity and professionalism.\n"
+        "2. Provide a concise 2–3 sentence description that communicates the project's purpose, scope, and relevance to the targeted role.\n"
+        "3. Clearly list key skills, technologies, and tools applied in the project.\n"
+        "4. Emphasize specific tasks, responsibilities, and contributions using strong action verbs.\n"
+        "5. Quantify achievements wherever possible to demonstrate measurable impact (e.g., improved performance by 20%, reduced processing time by 30%).\n"
+        "6. Maintain concise phrasing, readability, and professional formatting.\n"
+        "7. Tailor language to align with the target job description and ATS-relevant keywords.\n"
+        "8. Ensure flawless grammar, spelling, and consistent formatting throughout.\n"
+        "9. Format output EXACTLY as:\n"
+        "   Title: [Enhanced Project Title]\n"
+        "   Description: [Enhanced description in 2-3 sentences]\n"
+        "   ---\n"
+        "10. Return ONLY the enhanced project content; do NOT include explanations, commentary, or extra text.\n"
+        "Notes: Follow all Global Resume Rules and best practices for professional project presentation."
     )
+
 }
 
 
