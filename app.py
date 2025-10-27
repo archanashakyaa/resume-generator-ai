@@ -1,27 +1,47 @@
-from flask import Flask, request, send_file, jsonify, make_response, send_from_directory,render_template
+from flask import Flask, request, send_file, jsonify, send_from_directory, render_template
 from flask_cors import CORS
 from groq import Groq
 from docx import Document
+from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.colors import HexColor
 import os
 import traceback
 import logging
 import time
 import uuid
 import re
+import json
+from dotenv import load_dotenv
 
-from sympy.physics.units import temperature
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-# Simple CORS configuration
-CORS(app, resources={r"/*": {"origins": "*"}})
+# CORS configuration
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # Groq API Configuration
-GROQ_API_KEY = "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"
+GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # Initialize Groq client
@@ -31,19 +51,16 @@ if GROQ_API_KEY:
         client = Groq(api_key=GROQ_API_KEY)
         test_response = client.chat.completions.create(
             model=GROQ_MODEL,
-            messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=5,
-            temperature=0.7
+            messages=[{"role": "user", "content": "test"}],
+            max_tokens=5
         )
-        logger.info(f" Groq API connection successful with model: {GROQ_MODEL}")
-        print(f" Groq API Key loaded and tested successfully")
+        logger.info(f"Groq API connected successfully with model: {GROQ_MODEL}")
     except Exception as e:
         logger.error(f"Groq API connection failed: {e}")
-        print(f" Groq API connection failed: {e}")
         client = None
 else:
-    logger.error(" No GROQ_API_KEY found")
-    print("No GROQ_API_KEY found")
+    logger.error("No GROQ_API_KEY found")
+
 
 # Resume Enhancement Prompts
 GLOBAL_RULES = [
@@ -52,35 +69,131 @@ GLOBAL_RULES = [
     "Be concise, quantifiable, and clear.",
     "Fix grammar, avoid redundancy.",
     "Do not invent experiences or education.",
-    "Do not output anything else other than the output that goes inside a particular section; no commentaries of any sort."
 ]
 
 GLOBAL_RULE = "Global Resume Rules:\n" + "\n".join(f"{i + 1}. {rule}" for i, rule in enumerate(GLOBAL_RULES)) + "\n"
 
 resume_prompts = {
-
     "summary": (
-        "Role: Expert Resume Consultant\n"
-        "Objective: Craft a highly professional, targeted Resume Summary.\n"
-        "Instruction 1: Rewrite the summary in 50–70 words (2–4 concise sentences).\n"
-        "Instruction 2: Start with the professional title and years of relevant experience.\n"
-        "Instruction 3: Highlight top skills, key strengths, career goals, and 1–2 measurable achievements if possible.\n"
-        "Instruction 4: Use strong, varied, and descriptive professional adjectives (e.g., results-driven, dynamic, dedicated, strategic, proactive, detail-oriented) to convey expertise and impact, while maintaining a factual, concise, and highly professional tone.\n"
-        "Instruction 5: Tailor language to align with the targeted job description and ATS keywords.\n"
-        "Instruction 6: Avoid first-person pronouns, personal opinions, or unnecessary details.\n"
-        "Instruction 7: Ensure clarity, grammatical accuracy, and conciseness.\n"
-        "Instruction 8: Return only the single best, polished version for the resume.\n"
-        "Notes: Follow all Global Resume Rules."
+        "Role: Expert Resume Consultant & AI Career Coach Assistant\n"
+        "Objective: Generate a concise, impactful, and professionally written Resume Summary tailored to the user's role, skills, and career focus.\n\n"
+
+        "--------------------\n"
+        "🎯 **PRIMARY TASK:**\n"
+        "Craft a polished professional summary based solely on the user's provided information. The tone should be confident, clear, and employer-focused.\n"
+        "Do not invent experiences, education, or achievements beyond what is stated.\n\n"
+
+        "--------------------\n"
+        "📋 **CONTENT GUIDELINES:**\n"
+        "1. Rewrite the summary in **50–70 words (2–4 concise sentences)**.\n"
+        "2. Begin with the **professional title** and include **years of relevant experience** only if explicitly provided.\n"
+        "3. Emphasize **key technical and professional skills**, **core strengths**, and **career value**.\n"
+        "4. Include 1–2 **measurable or outcome-driven achievements** if contextually appropriate.\n"
+        "5. Use a variety of strong professional adjectives such as *results-driven, strategic, analytical, innovative, adaptable, or detail-oriented*.\n"
+        "6. Ensure the writing style aligns with **ATS optimization** and targeted job relevance.\n"
+        "7. Maintain grammatical precision, avoid redundancy, and exclude first-person language.\n"
+        "8. Always return **only one final, polished summary paragraph** — no explanations, introductions, or commentary.\n\n"
+
+        "--------------------\n"
+        "🧩 **KEY EXTRACTION RULES:**\n"
+        "From the user's input, identify and extract the following details:\n"
+        "- **Job Role / Target Title** (e.g., Project Manager, Data Analyst)\n"
+        "- **Core Skills / Technologies** (e.g., Python, SQL, Agile, CRM)\n"
+        "- **Years of Experience** (only if explicitly mentioned; do not infer or assume)\n\n"
+
+        "--------------------\n"
+        "🧠 **SUMMARY GENERATION LOGIC:**\n"
+        "- **If years of experience are mentioned:** naturally incorporate them into the first sentence.\n"
+        "  *Example:* 'Results-driven Project Manager with **6 years of experience** in delivering cross-functional initiatives...'\n"
+        "- **If no experience is mentioned:** use experience-neutral phrasing.\n"
+        "  *Use openings such as:* 'Proficient in...', 'Skilled in...', 'Adept at...', 'A motivated [Job Role] with expertise in...', "
+        "'Demonstrates strong capabilities in...'\n"
+        "- Avoid repetitive openings like 'A highly motivated...'\n\n"
+
+        "--------------------\n"
+        "🧾 **OUTPUT FORMAT:**\n"
+        "- Deliver only the final professional summary paragraph.\n"
+        "- The output must be 3–4 sentences, formatted as a single paragraph.\n"
+        "- Exclude any system messages, acknowledgments, or preambles.\n\n"
+
+        "--------------------\n"
+        "💡 **EXAMPLES:**\n"
+        "**Example 1 (With Experience):**\n"
+        "User Input: 'Write a summary for a Senior Software Engineer with 8 years of experience in Java and cloud technologies.'\n"
+        "Output: 'Seasoned Senior Software Engineer with over 8 years of expertise in developing robust applications using Java and cloud-native frameworks. "
+        "Recognized for leading cross-functional teams to deliver scalable, high-performance systems. Adept at optimizing full-stack architectures and implementing "
+        "best practices in DevOps and cloud deployment.'\n\n"
+
+        "**Example 2 (Without Experience):**\n"
+        "User Input: 'I need a professional summary for a Marketing Coordinator skilled in social media, content creation, and SEO.'\n"
+        "Output: 'Creative and data-driven Marketing Coordinator skilled in crafting engaging content and managing multi-platform campaigns. "
+        "Proficient in leveraging SEO and analytics to enhance digital presence and audience engagement. Demonstrates strong adaptability and strategic thinking to "
+        "align marketing initiatives with brand growth goals.'\n\n"
+
+        "--------------------\n"
+        "**Now, generate a concise, professional summary based on the user's query below:**"
     ),
+
     "experience": (
-        "Role: Expert Resume Consultant\n"
-        "Objective: Enhance the Work Experience section.\n"
-        "Instruction 1: Rewrite experience in 70–120 words.\n"
-        "Instruction 2: Use 3–5 bullet points per role; start each bullet with a strong action verb (e.g., Managed, Led, Improved).\n"
-        "Instruction 3: Quantify achievements wherever possible; emphasize measurable outcomes and transferable skills.\n"
-        "Instruction 4: Ensure ATS-friendly plain-text bullets (dash or •), avoid +, *, or markdown symbols.\n"
-        "Instruction 5: Return only the single best version for the resume.\n"
-        "Notes: Follow all Global Resume Rules."
+"Role: Expert Resume Consultant & Career Strategist\n"
+    "Objective: Transform raw work experience into compelling, achievement-oriented narratives that demonstrate measurable impact, transferable skills, and clear value to recruiters and ATS systems.\n\n"
+
+    "**PROCESSING FRAMEWORK:**\n\n"
+
+    "1.  **Input Analysis & Gap Handling:**\n"
+    "    - Extract role title, company, timeframe, and initial responsibilities.\n"
+    "    - If dates/timeframes are missing, structure chronologically based on context.\n"
+    "    - If specific metrics are absent, infer reasonable scope based on role seniority and industry norms.\n\n"
+
+    "2.  **Content Transformation Rules:**\n"
+    "    - Convert each role into **70–120 word, achievement-focused narratives**.\n"
+    "    - Structure with **3–5 concise, impactful bullet points** per role.\n"
+    "    - Begin each bullet with **strong, varied action verbs** (e.g., Managed, Led, Optimized, Implemented, Streamlined, Spearheaded, Orchestrated, Pioneered).\n"
+    "    - Apply **CAR (Challenge-Action-Result)** or **STAR (Situation-Task-Action-Result)** methodology implicitly.\n\n"
+
+    "3.  **Quantification Protocol:**\n"
+    "    - **Explicit Metrics:** Use provided numbers directly (revenue, percentages, timeframes).\n"
+    "    - **Inferred Impact:** Where numbers are missing, use industry-appropriate scale indicators (e.g., 'large-scale', 'multiple', 'cross-functional').\n"
+    "    - **Scope Indicators:** Quantify team sizes, budgets, project scales, or client impact based on role level.\n\n"
+
+    "4.  **ATS & Readability Optimization:**\n"
+    "    - Incorporate industry-specific keywords and transferable skills aligned with target job description.\n"
+    "    - Use plain-text, ATS-friendly bullets only (dash - or •).\n"
+    "    - Maintain a professional tone without personal pronouns or opinions.\n"
+    "    - Ensure grammatical consistency (past tense for prior roles, present tense for current roles).\n\n"
+
+    "5.  **Strategic Positioning:**\n"
+    "    - Align achievements with common resume screening criteria.\n"
+    "    - Highlight leadership, problem-solving, technical competencies, and business impact.\n"
+    "    - Emphasize measurable results and ROI whenever possible.\n\n"
+
+    "6.  **Output Standards:**\n"
+    "    - Return a **single polished version per role**.\n"
+    "    - Maintain consistent formatting across all experiences.\n"
+    "    - Ensure clarity, professionalism, and factual accuracy.\n"
+    "    - Follow all **Global Resume Rules**.\n\n"
+
+    "**FORMAT TEMPLATE:**\n"
+    "- [Achievement 1: Action verb + quantified result + business impact]\n"
+    "- [Achievement 2: Leadership/initiative + scope + outcome]\n"
+    "- [Achievement 3: Process improvement + metrics + efficiency gain]\n\n"
+
+    "**EXAMPLE TRANSFORMATIONS:**\n\n"
+    "*Before:*\n"
+    "\"Was responsible for sales team and meeting targets\"\n\n"
+    "*After:*\n"
+    "- Led and motivated 12-person sales team to exceed quarterly targets by 15-25% for 6 consecutive quarters\n"
+    "- Implemented a new CRM system that improved sales pipeline visibility and increased conversion rate by 30%\n"
+    "- Developed strategic account plans that expanded key client portfolios by 40% year-over-year\n\n"
+    "*Before:*\n"
+    "\"Handled software development and project management\"\n\n"
+    "*After:*\n"
+    "- Spearheaded development of 3 major product features using Agile methodology, delivering 2 weeks ahead of schedule\n"
+    "- Managed $500K project budget while coordinating cross-functional teams of 15+ engineers and designers\n"
+    "- Optimized deployment processes, reducing production incidents by 60% and improving system reliability\n\n"
+
+    "**READY TO PROCESS:**\n"
+    "[User's work experience input will be transformed here]"
     ),
     "skills": (
         "Role: Expert Resume Consultant\n"
@@ -94,348 +207,516 @@ resume_prompts = {
         "Instruction 7: Ensure formatting is consistent, professional, and ATS-friendly.\n"
         "Instruction 8: Return only the single best version for the resume.\n"
         "Notes: Follow all Global Resume Rules."
-
     ),
     "education": (
         "Role: Expert Resume Consultant\n"
-        "Objective: Improve the Education section.\n"
+        "Objective: Improve the Education section to clearly showcase qualifications relevant to the targeted role.\n"
         "Instruction 1: Rewrite in 50–100 words.\n"
-        "Instruction 2: Clearly present degree, university/college, dates, certifications, and relevant coursework.\n"
-        "Instruction 3: Focus on what supports career goals; concise and factual sentences.\n"
-        "Instruction 4: Return only the single best version for the resume.\n"
+        "Instruction 2: Clearly present degrees, certifications, relevant coursework, honors, and any notable academic achievements.\n"
+        "Instruction 3: Highlight how the education supports career goals and aligns with the targeted job.\n"
+        "Instruction 4: Use concise, professional language; maintain clarity, proper grammar, and factual accuracy.\n"
+        "Instruction 5: Ensure formatting is ATS-friendly and easily scannable.\n"
+        "Instruction 6: Return only the single best, polished version for the resume.\n"
         "Notes: Follow all Global Resume Rules."
     ),
     "projects": (
-        "Role: Expert Resume Consultant\n"
-        "Objective: Enhance the Projects section to maximize relevance, clarity, and measurable impact for ATS and hiring managers.\n"
-        "Instruction 1: Include Project Name, Role, and Dates/Duration.\n"
-        "Instruction 2: List only projects relevant to the targeted job, prioritizing by impact.\n"
-        "Instruction 3: Clearly state technologies, tools, or skills used (optional but recommended).\n"
-        "Instruction 4: Use 50–100 words per project; provide concise bullet points for contributions, responsibilities, and achievements.\n"
-        "Instruction 5: Start bullets with strong action verbs; apply PAR formula (Problem, Action, Result) wherever possible.\n"
-        "Instruction 6: Quantify results and achievements with numbers, percentages, or measurable outcomes.\n"
-        "Instruction 7: Include hyperlinks to online projects or portfolios with clean, descriptive text.\n"
-        "Instruction 8: Use plain-text bullets (dash - or •); avoid +, *, or markdown formatting.\n"
-        "Instruction 9: Keep language clear, professional, and tailored to the job description.\n"
-        "Instruction 10: Limit bullets to 3–5 per project; ensure ATS-friendly formatting.\n"
-        "Instruction 11: Return only the single best version for the resume.\n"
-        "Notes: Follow all Global Resume Rules."
+        "Role: Expert Resume Consultant & Project Portfolio Strategist\n"
+        "Objective: Transform the Projects section to maximize clarity, relevance, and measurable impact.\n"
+        "Instructions:\n"
+        "1. For EACH project, enhance the title and description separately, ensuring clarity and professionalism.\n"
+        "2. Provide a concise 2–3 sentence description that communicates the project's purpose, scope, and relevance to the targeted role.\n"
+        "3. Clearly list key skills, technologies, and tools applied in the project.\n"
+        "4. Emphasize specific tasks, responsibilities, and contributions using strong action verbs.\n"
+        "5. Quantify achievements wherever possible to demonstrate measurable impact (e.g., improved performance by 20%, reduced processing time by 30%).\n"
+        "6. Maintain concise phrasing, readability, and professional formatting.\n"
+        "7. Tailor language to align with the target job description and ATS-relevant keywords.\n"
+        "8. Ensure flawless grammar, spelling, and consistent formatting throughout.\n"
+        "9. Format output EXACTLY as:\n"
+        "   Title: [Enhanced Project Title]\n"
+        "   Description: [Enhanced description in 2-3 sentences]\n"
+        "   ---\n"
+        "10. Return ONLY the enhanced project content; do NOT include explanations, commentary, or extra text.\n"
+        "Notes: Follow all Global Resume Rules and best practices for professional project presentation."
     )
 }
 
 
-
-def _safe_response_content(response):
-    """Extract text from Groq response."""
-    try:
-        return response.choices[0].message.content.strip()
-    except Exception:
-        return ""
-
-
-def _sanitize_input(text, max_chars=3000):
-    """Trim and sanitize input."""
+def sanitize_input(text, max_chars=3000):
+    """Clean and limit input text."""
     if not text:
         return ""
-    s = re.sub(r'\s+', ' ', text).strip()
-    if len(s) > max_chars:
-        s = s[:max_chars].rsplit(' ', 1)[0]
-    return s
+    text = re.sub(r'\s+', ' ', text).strip()
+    if len(text) > max_chars:
+        text = text[:max_chars].rsplit(' ', 1)[0]
+    return text
 
 
-def enhance_section(section_name, user_input, max_retries=2):
-    """Enhance a resume section using Groq AI."""
-    section_name = (section_name or "").strip()
-    cleaned_input = _sanitize_input(user_input)
+def clean_ai_response(text):
+    """Remove common AI response artifacts."""
+    if not text:
+        return ""
 
-    if not cleaned_input:
-        logger.warning("Empty input for section: %s", section_name)
-        return f"[{section_name.title()} section not provided.]"
+    # Remove code fences
+    text = re.sub(r'^```(?:\w+)?\s*|```$', '', text, flags=re.MULTILINE).strip()
 
+    # Remove common preambles
+    patterns = [
+        r'^(?:Here\'s|Here is|Enhanced version:|Enhanced:|Sure,?.*?:)\s*',
+        r'^(?:Certainly|Of course|Absolutely).*?:\s*',
+        r'^\*\*.*?\*\*\s*',  # Remove markdown bold headers
+    ]
+    for pattern in patterns:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.MULTILINE)
+
+    # Remove quotes
+    text = re.sub(r'^["\']|["\']$', '', text.strip())
+
+    return text.strip()
+
+
+def enhance_section(section_name, content, max_retries=2):
+    """Enhance a resume section using Groq AI with your specific prompts."""
     if not client:
         logger.error("Groq client not available")
-        return cleaned_input
+        return content
 
-    prompt_body = resume_prompts.get(section_name.lower(), "")
-    prompt = (
+    section_name = section_name.lower().strip()
+
+    # Handle projects - parse JSON if provided
+    if section_name == "projects":
+        try:
+            projects = json.loads(content)
+            if isinstance(projects, list) and projects:
+                formatted = "\n\n".join([
+                    f"Project {i + 1}:\nTitle: {p.get('title', 'Untitled')}\n"
+                    f"Description: {p.get('description', 'No description')}"
+                    for i, p in enumerate(projects)
+                ])
+                content = formatted
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Sanitize input
+    content = sanitize_input(content)
+    if not content:
+        logger.warning(f"Empty content for section: {section_name}")
+        return ""
+
+    # Get the detailed prompt
+    prompt_template = resume_prompts.get(section_name, resume_prompts["summary"])
+
+    # Construct full prompt with global rules
+    full_prompt = (
         f"{GLOBAL_RULE}\n\n"
-        f"{prompt_body}\n\n"
-        "IMPORTANT: Return only plain text, no JSON, markdown, or code fences.\n\n"
-        f"User Input:\n{cleaned_input}\n\nEnhanced Content:"
+        f"{prompt_template}\n\n"
+        f"User Input:\n{content}\n\n"
+        f"Enhanced Content:"
     )
 
+    # Retry logic with exponential backoff
     for attempt in range(max_retries + 1):
         try:
-            logger.debug("Groq request attempt %d for section: %s", attempt + 1, section_name)
+            logger.info(f"Enhancing {section_name} (attempt {attempt + 1}/{max_retries + 1})")
+
             response = client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[
-                    {"role": "system",
-                     "content": "You are an expert resume consultant. Improve the given content professionally."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an expert resume consultant. Follow the instructions precisely and return ONLY the enhanced content without any preambles, explanations, or meta-commentary."
+                    },
+                    {
+                        "role": "user",
+                        "content": full_prompt
+                    }
                 ],
-                temperature=0.0,
-                max_tokens=800
+                temperature=0.5,
+                max_tokens=1024,
+                top_p=0.95
             )
 
-            enhanced_content = _safe_response_content(response)
-            if not enhanced_content:
-                raise ValueError("Empty response from model")
+            enhanced = response.choices[0].message.content.strip()
+            enhanced = clean_ai_response(enhanced)
 
-            # Clean response
-            enhanced_content = re.sub(r"^```(?:\w+)?\s*|```$", "", enhanced_content).strip()
-            enhanced_content = re.sub(r"^\"|\"$", "", enhanced_content).strip()
+            if not enhanced:
+                raise ValueError("Empty response from AI")
 
-            logger.info("Successfully enhanced section: %s", section_name)
-            return enhanced_content
+            logger.info(f"Successfully enhanced {section_name} ({len(enhanced)} chars)")
+            return enhanced
 
         except Exception as e:
-            logger.error("Groq API failed (attempt %d): %s", attempt + 1, str(e))
+            logger.error(f"Enhancement failed (attempt {attempt + 1}): {str(e)}")
             if attempt >= max_retries:
-                return cleaned_input
+                logger.warning(f"Max retries reached, returning original content for {section_name}")
+                return content
             time.sleep(1 * (2 ** attempt))
 
+    return content
 
-def _format_paragraphs_for_doc(text):
+
+def format_for_docx(text):
     """Format text into paragraphs for DOCX."""
+    if not text:
+        return
+
     text = text.strip()
-    if ',' in text and '\n' not in text and len(text.split(',')) > 1 and len(text) < 200:
+
+    # Handle comma-separated lists (skills)
+    if ',' in text and '\n' not in text and len(text.split(',')) > 2:
         yield text
         return
 
-    for block in re.split(r'\n\s*\n', text):
+    # Split by double newlines or "---"
+    for block in re.split(r'\n\s*\n|---', text):
         block = block.strip()
         if not block:
             continue
+
         lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-        if all(re.match(r'^(\-|\*|\d+\.)\s+', ln) for ln in lines) and len(lines) > 1:
+
+        # Check if it's a bullet list
+        is_list = all(re.match(r'^[•\-]\s+', ln) for ln in lines if ln)
+
+        if is_list and len(lines) > 1:
             yield '\n'.join(lines)
         else:
             yield ' '.join(lines)
 
 
-def save_resume_docx(enhanced_resume, filename=None):
-    """Save enhanced resume to DOCX file."""
-    try:
-        if not filename:
-            filename = f"Enhanced_Resume_{uuid.uuid4().hex[:8]}.docx"
-        os.makedirs("generated", exist_ok=True)
-        filepath = os.path.join("generated", filename)
+def create_enhanced_docx(resume_data, filename=None):
+    """Create a professionally formatted DOCX resume."""
+    if not filename:
+        filename = f"Resume_{uuid.uuid4().hex[:8]}.docx"
 
-        doc = Document()
+    os.makedirs("generated", exist_ok=True)
+    filepath = os.path.join("generated", filename)
 
-        name = enhanced_resume.get('Name') or enhanced_resume.get('name')
-        if name and isinstance(name, str) and name.strip():
-            doc.add_heading(name.strip(), level=0)
+    doc = Document()
 
-        order = [
-            'Contact Information', 'Professional Summary', 'Work Experience',
-            'Education', 'Skills', 'Projects'
-        ]
-        remaining = [k for k in enhanced_resume.keys() if k not in order and k != 'Name']
-        ordered_keys = [k for k in order if k in enhanced_resume] + remaining
+    # Set default font
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(11)
 
-        for section in ordered_keys:
-            text = enhanced_resume.get(section)
-            if not text:
+    # Add name as title
+    name = resume_data.get('Name', '').strip()
+    if name:
+        title = doc.add_heading(name, level=0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Section order
+    section_order = [
+        'Contact Information',
+        'Professional Summary',
+        'Work Experience',
+        'Education',
+        'Skills',
+        'Projects'
+    ]
+
+    # Add sections
+    for section_name in section_order:
+        content = resume_data.get(section_name, '').strip()
+        if not content or content.startswith('['):
+            continue
+
+        # Add section heading
+        heading = doc.add_heading(section_name, level=1)
+        heading_format = heading.runs[0].font
+        heading_format.color.rgb = RGBColor(31, 78, 121)
+
+        # Add content
+        for paragraph_text in format_for_docx(content):
+            para = doc.add_paragraph(paragraph_text)
+            para.paragraph_format.space_after = Pt(6)
+
+    doc.save(filepath)
+    logger.info(f"DOCX saved: {filepath}")
+    return filepath
+
+
+def create_enhanced_pdf(resume_data, filename=None):
+    """Create a professionally formatted PDF resume."""
+    if not filename:
+        filename = f"Resume_{uuid.uuid4().hex[:8]}.pdf"
+
+    os.makedirs("generated", exist_ok=True)
+    filepath = os.path.join("generated", filename)
+
+    doc = SimpleDocTemplate(filepath, pagesize=letter,
+                            topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+                            leftMargin=0.75 * inch, rightMargin=0.75 * inch)
+
+    # Custom styles
+    styles = getSampleStyleSheet()
+
+    # Name style
+    name_style = ParagraphStyle(
+        'CustomName',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=HexColor('#1F4E79'),
+        alignment=TA_CENTER,
+        spaceAfter=6
+    )
+
+    # Contact style
+    contact_style = ParagraphStyle(
+        'ContactInfo',
+        parent=styles['Normal'],
+        fontSize=10,
+        alignment=TA_CENTER,
+        spaceAfter=12
+    )
+
+    # Section heading style
+    section_style = ParagraphStyle(
+        'SectionHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=HexColor('#1F4E79'),
+        spaceBefore=12,
+        spaceAfter=6,
+        borderWidth=0,
+        borderColor=HexColor('#1F4E79'),
+        borderPadding=0
+    )
+
+    # Body text style
+    body_style = ParagraphStyle(
+        'BodyText',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=14,
+        spaceAfter=6
+    )
+
+    # Build document
+    story = []
+
+    # Add name
+    name = resume_data.get('Name', '').strip()
+    if name:
+        story.append(Paragraph(name, name_style))
+
+    # Add contact information
+    contact = resume_data.get('Contact Information', '').strip()
+    if contact:
+        story.append(Paragraph(contact, contact_style))
+
+    story.append(Spacer(1, 0.1 * inch))
+
+    # Section order
+    section_order = [
+        'Professional Summary',
+        'Work Experience',
+        'Education',
+        'Skills',
+        'Projects'
+    ]
+
+    # Add sections
+    for section_name in section_order:
+        content = resume_data.get(section_name, '').strip()
+        if not content or content.startswith('['):
+            continue
+
+        # Add section heading
+        story.append(Paragraph(section_name, section_style))
+
+        # Add content
+        # Handle bullet points
+        content_lines = content.split('\n')
+        for line in content_lines:
+            line = line.strip()
+            if not line:
                 continue
-            text = text.strip()
-            if text.startswith('[') and text.endswith('section not provided.]'):
-                continue
 
-            doc.add_heading(section.replace('_', ' ').title(), level=1)
+            # Convert bullet points
+            if line.startswith('•') or line.startswith('-'):
+                line = '&bull; ' + line[1:].strip()
 
-            for paragraph in _format_paragraphs_for_doc(text):
-                if '\n' in paragraph and any(re.match(r'^(\-|\*|\d+\.)\s+', ln) for ln in paragraph.splitlines()):
-                    for ln in paragraph.splitlines():
-                        doc.add_paragraph(ln)
-                else:
-                    doc.add_paragraph(paragraph)
+            story.append(Paragraph(line, body_style))
 
-        doc.save(filepath)
-        logger.info("DOCX file saved: %s", filepath)
-        return filepath
-    except Exception as e:
-        logger.error("Failed to create DOCX: %s", str(e))
-        traceback.print_exc()
-        raise
+        story.append(Spacer(1, 0.1 * inch))
+
+    # Build PDF
+    doc.build(story)
+    logger.info(f"PDF saved: {filepath}")
+    return filepath
 
 
-# Routes
+# -----------------------------------------------------------------------------
+# Route: /
+# Method: GET
+# Purpose: Serve the main resume builder page
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Route: /
+# Method: GET
+# Purpose: Serve the main resume builder page
+# -----------------------------------------------------------------------------
 @app.route("/")
 def index():
-    """Serve the main page."""
-    return render_template("index.html")
+    """Serve the main resume builder page."""
+    return render_template('index.html')
 
 
-@app.route("/enhance", methods=["POST", "OPTIONS"])
-def enhance_ajax():
-    """Enhance a resume section."""
-    if request.method == "OPTIONS":
-        return "", 200
+# -----------------------------------------------------------------------------
+# Route: /health
+# Method: GET
+# Purpose: Health check endpoint to verify server is running
+# -----------------------------------------------------------------------------
+@app.route("/health", methods=["GET"])
+def health():
+    """Health check endpoint."""
+    return jsonify({
+        "status": "ok",
+        "groq_connected": client is not None,
+        "model": GROQ_MODEL
+    }), 200
 
+
+# -----------------------------------------------------------------------------
+# Route: /enhance
+# Method: POST
+# Purpose: Enhance a specific section of the resume using AI
+# -----------------------------------------------------------------------------
+@app.route("/enhance", methods=["POST"])
+def enhance():
+    """Enhance a specific resume section."""
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'success': False, 'error': 'No data received'}), 400
+            return jsonify({"error": "No data provided"}), 400
 
-        section_name = data.get('section')
-        content = data.get('content')
+        section = data.get('section', '').strip()
+        content = data.get('content', '').strip()
 
-        if not section_name:
-            return jsonify({'success': False, 'error': 'Missing section name'}), 400
+        if not section or not content:
+            return jsonify({"error": "Missing section or content"}), 400
 
-        if not client:
-            return jsonify({'success': False, 'error': 'AI service not available'}), 500
-
-        enhanced_content = enhance_section(section_name, content or "")
+        logger.info(f"Enhancing section: {section}")
+        enhanced = enhance_section(section, content)
 
         return jsonify({
-            'success': True,
-            'enhanced_content': enhanced_content,
-            'section': section_name
-        })
+            "success": True,
+            "section": section,
+            "enhanced": enhanced
+        }), 200
 
     except Exception as e:
-        logger.error(f"Enhancement error: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Enhancement error: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route("/generate_resume", methods=["POST", "OPTIONS"])
+# -----------------------------------------------------------------------------
+# Route: /generate_resume
+# Method: POST
+# Purpose: Generate a complete resume with AI enhancements
+# -----------------------------------------------------------------------------
+@app.route("/generate_resume", methods=["POST"])
 def generate_resume():
-    """Generate complete resume DOCX."""
-    if request.method == "OPTIONS":
-        return "", 200
-
+    """Generate enhanced resume in both DOCX and PDF formats."""
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No data received'}), 400
+        resume_data = request.get_json()
+        if not resume_data:
+            return jsonify({"error": "No resume data provided"}), 400
 
-        enhanced_resume = {}
+        logger.info("Generating enhanced resume")
 
-        # Personal info
-        personal_info = data.get('personal', {})
-        if personal_info:
-            contact_info = [personal_info.get(field) for field in ['email', 'phone', 'location', 'linkedin'] if
-                            personal_info.get(field)]
-            if contact_info:
-                enhanced_resume['Contact Information'] = ' | '.join(contact_info)
-            if personal_info.get('fullName'):
-                enhanced_resume['Name'] = personal_info['fullName']
-            if personal_info.get('summary'):
-                enhanced_resume['Professional Summary'] = enhance_section("summary", personal_info['summary'])
-
-        # Experience
-        experiences = data.get('experiences', [])
-        if experiences:
-            exp_content = []
-            for exp in experiences:
-                if any([exp.get('title'), exp.get('company'), exp.get('description')]):
-                    exp_text = f"{exp.get('title', 'Position')} - {exp.get('company', 'Company')}"
-                    if exp.get('startDate') or exp.get('endDate'):
-                        start = exp.get('startDate', '')
-                        end = exp.get('endDate', 'Present') if not exp.get('current') else 'Present'
-                        exp_text += f" ({start} - {end})"
-                    if exp.get('description'):
-                        exp_text += f"\n{exp.get('description')}"
-                    exp_content.append(exp_text)
-            if exp_content:
-                enhanced_resume['Work Experience'] = enhance_section("experience", '\n\n'.join(exp_content))
-
-        # Education
-        education = data.get('education', [])
-        if education:
-            edu_content = []
-            for edu in education:
-                if any([edu.get('degree'), edu.get('field'), edu.get('institution')]):
-                    edu_text = f"{edu.get('degree', '')} in {edu.get('field', '')}"
-                    if edu.get('institution'):
-                        edu_text += f" - {edu.get('institution')}"
-                    if edu.get('year'):
-                        edu_text += f" ({edu.get('year')})"
-                    if edu.get('details'):
-                        edu_text += f"\n{edu.get('details')}"
-                    edu_content.append(edu_text)
-            if edu_content:
-                enhanced_resume['Education'] = enhance_section("education", '\n\n'.join(edu_content))
-
-        # Skills and Projects
-        if data.get('skills'):
-            enhanced_resume['Skills'] = enhance_section("skills", data['skills'])
-        if data.get('projects'):
-            enhanced_resume['Projects'] = enhance_section("projects", data['projects'])
-
-        if not enhanced_resume:
-            return jsonify({'success': False, 'error': 'No content to generate'}), 400
-
-        filename = save_resume_docx(enhanced_resume)
+        # Create both formats
+        docx_path = create_enhanced_docx(resume_data)
+        pdf_path = create_enhanced_pdf(resume_data)
 
         return jsonify({
-            'success': True,
-            'message': 'Resume generated successfully',
-            'filename': os.path.basename(filename)
-        })
+            "success": True,
+            "message": "Resume generated successfully",
+            "docx": os.path.basename(docx_path),
+            "pdf": os.path.basename(pdf_path)
+        }), 200
 
     except Exception as e:
-        logger.error(f"Generation error: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Resume generation error: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route("/download")
+# -----------------------------------------------------------------------------
+# Route: /download
+# Method: GET
+# Purpose: Download the most recently generated resume in DOCX format.
+# -----------------------------------------------------------------------------
+@app.route("/download", methods=["GET"])
 def download():
-    """Download generated resume."""
+    """Download the most recent resume in DOCX format."""
     try:
+        # Check if the 'generated' directory exists
+        if not os.path.exists('generated'):
+            # If not, return a 404 error with a message
+            return jsonify({"error": "No resumes generated yet"}), 404
+
+        # List all files in 'generated' that end with .docx (Word files)
         files = [f for f in os.listdir('generated') if f.endswith('.docx')]
         if not files:
-            return jsonify({"error": "No resume found. Generate one first."}), 404
+            # If no DOCX files found, return a 404 error
+            return jsonify({"error": "No resume found"}), 404
 
-        latest_file = max([os.path.join('generated', f) for f in files], key=os.path.getctime)
-        return send_file(latest_file, as_attachment=True, download_name='Enhanced_Resume.docx')
+        # Find the most recently created DOCX file (by creation time)
+        latest = max([os.path.join('generated', f) for f in files], key=os.path.getctime)
+        # Send the file as a download with a user-friendly filename
+        return send_file(latest, as_attachment=True, download_name='Enhanced_Resume.docx')
+
     except Exception as e:
+        # Log any errors and return a 500 error with the error message
         logger.error(f"Download error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/health")
-def health():
-    """Health check endpoint."""
-    health_status = {
-        'status': 'healthy',
-        'groq_configured': bool(client),
-        'model': GROQ_MODEL,
-        'endpoints': ['/enhance', '/generate_resume', '/download', '/health']
-    }
+# -----------------------------------------------------------------------------
+# Route: /download_pdf
+# Method: GET
+# Purpose: Download the most recently generated resume in PDF format.
+# -----------------------------------------------------------------------------
+@app.route("/download_pdf", methods=["GET"])
+def download_pdf():
+    """Download the most recent resume in PDF format."""
+    try:
+        # Check if the 'generated' directory exists
+        if not os.path.exists('generated'):
+            return jsonify({"error": "No resumes generated yet"}), 404
 
-    if client:
-        try:
-            client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=[{"role": "user", "content": "test"}],
-                max_tokens=1,
-                temperature=0.7
-            )
-            health_status['groq_status'] = 'connected'
-        except Exception as e:
-            health_status['groq_status'] = f'error: {str(e)}'
-            health_status['status'] = 'degraded'
-    else:
-        health_status['groq_status'] = 'not_configured'
-        health_status['status'] = 'degraded'
+        # List all files in 'generated' that end with .pdf
+        files = [f for f in os.listdir('generated') if f.endswith('.pdf')]
+        if not files:
+            return jsonify({"error": "No PDF resume found"}), 404
 
-    return jsonify(health_status)
+        # Find the most recently created PDF file
+        latest = max([os.path.join('generated', f) for f in files], key=os.path.getctime)
+        # Send the file as a download with a user-friendly filename
+        return send_file(latest, as_attachment=True, download_name='Enhanced_Resume.pdf')
+
+    except Exception as e:
+        logger.error(f"Download PDF error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
+# -----------------------------------------------------------------------------
+# Main entry point for running the Flask app
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Resume Builder Server Starting")
-    print("=" * 60)
-    print(f"🤖 Model: {GROQ_MODEL}")
-    print(f"🔑 API Key: {' Configured' if GROQ_API_KEY else '❌ Missing'}")
-    print(f"🔗 Groq Client: {'Connected' if client else '❌ Failed'}")
-    print(f"🌐 Server: http://localhost:5000")
-    print("=" * 60)
+    PORT = 5002  # Changed to avoid conflicts
+    
+    # Print server startup info to the console
+    print("=" * 70)
+    print("  Resume Builder Backend Server")
+    print("=" * 70)
+    print(f"  Model: {GROQ_MODEL}")
+    print(f"  API Key: {'Configured' if GROQ_API_KEY else 'Missing'}")
+    print(f"  Groq Client: {'Connected' if client else 'Failed'}")
+    print(f"  Server: http://localhost:{PORT}")
+    print(f"  Health Check: http://localhost:{PORT}/health")
+    print("=" * 70)
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Start the Flask development server, accessible on all network interfaces
+    app.run(debug=True, host='0.0.0.0', port=PORT)
