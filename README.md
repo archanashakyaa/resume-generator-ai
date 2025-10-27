@@ -18,6 +18,13 @@ An AI-powered resume builder that helps you create stunning, ATS-friendly resume
 - ✅ **ATS-Optimized**: Content formatted to pass Applicant Tracking Systems
 - 🎯 **Dynamic API Configuration**: Automatically adapts to different server origins
 - 💡 **Enhanced Prompts**: Industry-standard STAR/CAR methodology for achievements
+- 📥 **LinkedIn Import**: Quick profile data import (coming soon)
+- 📊 **Resume Analysis & Scoring**: AI-powered resume evaluation with detailed feedback
+  - Overall score (0-100)
+  - Category breakdowns (formatting, content, keywords, impact, completeness, ATS compatibility)
+  - Strengths and improvement areas
+  - Critical recommendations
+  - Missing keywords suggestions
 
 ## 🚀 Quick Start
 
@@ -99,6 +106,27 @@ resume-bsi/
 3. **Education**
    - Add your degrees, institutions, and graduation years
    - Include additional details like GPA or honors
+
+4. **Skills**
+   - Enter comma-separated skills
+   - Skills will be displayed in the selected template style
+
+5. **Projects** (Optional)
+   - Add relevant projects with descriptions
+   - Include technologies used and outcomes
+
+6. **Resume Analysis**
+   - Click "Analyze Resume" to get comprehensive scoring
+   - Review overall score and category breakdowns
+   - Check strengths and areas for improvement
+   - Get ATS compatibility rating
+   - Review critical recommendations and missing keywords
+   - Use the feedback to enhance your resume
+
+7. **LinkedIn Import** (Coming Soon)
+   - Click "Import LinkedIn" in the Personal Information section
+   - Enter your LinkedIn profile URL
+   - Data will be automatically populated (feature in development)
 
 4. **Skills**
    - Add comma-separated skills

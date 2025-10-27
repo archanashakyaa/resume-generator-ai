@@ -859,3 +859,146 @@ document.addEventListener('DOMContentLoaded', () => {
     updateProgress();
     showToast('Ready! Make sure Flask backend is running on port 5002');
 });
+
+// LinkedIn Import Function
+async function importLinkedIn() {
+    const linkedinUrl = document.getElementById('linkedin').value;
+    
+    if (!linkedinUrl) {
+        const url = prompt('Enter your LinkedIn profile URL:');
+        if (!url) return;
+        document.getElementById('linkedin').value = url;
+    }
+    
+    showToast('LinkedIn import feature coming soon! For now, manually enter your information or paste your LinkedIn summary into the Professional Summary field and use AI enhancement.', 'info');
+    
+    // Future implementation would make API call
+    /*
+    try {
+        const response = await fetch(`${API_BASE_URL}/import_linkedin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ linkedin_url: linkedinUrl })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            // Populate form fields with imported data
+            showToast('LinkedIn profile imported successfully!');
+        }
+    } catch (error) {
+        showToast('Error importing LinkedIn profile', 'error');
+    }
+    */
+}
+
+// Resume Analysis Function
+async function analyzeResume() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+    
+    try {
+        // Collect all resume data
+        const resumeContent = {
+            personalInfo: {
+                fullName: document.getElementById('fullName').value,
+                email: document.getElementById('email').value,
+                phone: document.getElementById('phone').value,
+                linkedin: document.getElementById('linkedin').value,
+                summary: document.getElementById('summary').value
+            },
+            experience: resumeData.experiences,
+            education: resumeData.education,
+            skills: document.getElementById('skills').value.split(',').map(s => s.trim()).filter(s => s)
+        };
+        
+        const response = await fetch(`${API_BASE_URL}/analyze_resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(resumeContent)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Analysis failed');
+        }
+        
+        const analysis = await response.json();
+        displayAnalysisResults(analysis);
+        showToast('Resume analysis complete!');
+        
+    } catch (error) {
+        console.error('Analysis error:', error);
+        showToast('Error analyzing resume. Please try again.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Analyze Resume';
+    }
+}
+
+// Display Analysis Results
+function displayAnalysisResults(analysis) {
+    const resultsDiv = document.getElementById('analysisResults');
+    resultsDiv.style.display = 'block';
+    
+    // Overall Score
+    document.getElementById('overallScore').textContent = analysis.overallScore;
+    const scoreCircle = document.querySelector('.score-circle');
+    scoreCircle.style.background = `conic-gradient(
+        ${getScoreColor(analysis.overallScore)} ${analysis.overallScore}%, 
+        #e2e8f0 ${analysis.overallScore}%
+    )`;
+    
+    // Score Breakdown
+    const scores = analysis.scores;
+    updateScoreBar('scoreFormatting', 'scoreFormattingValue', scores.formatting);
+    updateScoreBar('scoreContent', 'scoreContentValue', scores.content);
+    updateScoreBar('scoreKeywords', 'scoreKeywordsValue', scores.keywords);
+    updateScoreBar('scoreImpact', 'scoreImpactValue', scores.impact);
+    updateScoreBar('scoreCompleteness', 'scoreCompletenessValue', scores.completeness);
+    updateScoreBar('scoreATS', 'scoreATSValue', analysis.atsCompatibility);
+    
+    // Strengths
+    const strengthsList = document.getElementById('strengthsList');
+    strengthsList.innerHTML = analysis.strengths.map(s => `<li>✅ ${s}</li>`).join('');
+    
+    // Improvements
+    const improvementsList = document.getElementById('improvementsList');
+    improvementsList.innerHTML = analysis.improvements.map(i => `<li>⚠️ ${i}</li>`).join('');
+    
+    // Critical Recommendations
+    const criticalList = document.getElementById('criticalList');
+    criticalList.innerHTML = (analysis.recommendations.critical || []).map(c => `<li>🚨 ${c}</li>`).join('') || '<li>No critical issues found!</li>';
+    
+    // Suggested Enhancements
+    const suggestedList = document.getElementById('suggestedList');
+    suggestedList.innerHTML = (analysis.recommendations.suggested || []).map(s => `<li>💡 ${s}</li>`).join('');
+    
+    // Missing Keywords
+    const keywordsList = document.getElementById('keywordsList');
+    keywordsList.innerHTML = (analysis.recommendations.keywords || []).map(k => 
+        `<span class="keyword-tag">${k}</span>`
+    ).join('');
+    
+    // Summary
+    const analysisSummary = document.getElementById('analysisSummary');
+    analysisSummary.innerHTML = `<p><strong>Summary:</strong> ${analysis.summary}</p>`;
+    
+    // Scroll to results
+    resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function updateScoreBar(barId, valueId, score) {
+    const bar = document.getElementById(barId);
+    const value = document.getElementById(valueId);
+    bar.style.width = `${score}%`;
+    bar.style.backgroundColor = getScoreColor(score);
+    value.textContent = score;
+}
+
+function getScoreColor(score) {
+    if (score >= 80) return '#48bb78'; // Green
+    if (score >= 60) return '#ed8936'; // Orange
+    return '#f56565'; // Red
+}
+

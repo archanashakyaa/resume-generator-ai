@@ -21,9 +21,14 @@
                 <div class="section-card">
                     <div class="section-controls">
                         <h3 class="section-title">Personal Information</h3>
-                        <button type="button" class="btn btn-enhance" onclick="enhanceSection('summary')">
-                            Enhance Summary
-                        </button>
+                        <div class="button-group">
+                            <button type="button" class="btn btn-secondary" onclick="importLinkedIn()" title="Import from LinkedIn">
+                                📥 Import LinkedIn
+                            </button>
+                            <button type="button" class="btn btn-enhance" onclick="enhanceSection('summary')">
+                                ✨ Enhance Summary
+                            </button>
+                        </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -230,6 +235,98 @@
                             <button class="btn btn-primary" onclick="saveCustomDesign()">💾 Save Design</button>
                             <button class="btn btn-secondary" onclick="resetCustomDesign()">🔄 Reset</button>
                             <button class="btn btn-secondary" onclick="exportDesignConfig()">📥 Export Config</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resume Analysis Section -->
+                <div class="section-card">
+                    <div class="section-controls">
+                        <h3 class="section-title">📊 Resume Analysis</h3>
+                        <button type="button" class="btn btn-primary" onclick="analyzeResume()">
+                            Analyze Resume
+                        </button>
+                    </div>
+                    <div id="analysisResults" style="display: none;">
+                        <div class="analysis-score">
+                            <div class="score-circle">
+                                <div class="score-value" id="overallScore">--</div>
+                                <div class="score-label">Overall Score</div>
+                            </div>
+                        </div>
+                        
+                        <div class="score-breakdown">
+                            <h4>Score Breakdown</h4>
+                            <div class="score-item">
+                                <span>Formatting</span>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="scoreFormatting"></div>
+                                </div>
+                                <span id="scoreFormattingValue">--</span>
+                            </div>
+                            <div class="score-item">
+                                <span>Content Quality</span>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="scoreContent"></div>
+                                </div>
+                                <span id="scoreContentValue">--</span>
+                            </div>
+                            <div class="score-item">
+                                <span>Keywords</span>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="scoreKeywords"></div>
+                                </div>
+                                <span id="scoreKeywordsValue">--</span>
+                            </div>
+                            <div class="score-item">
+                                <span>Impact</span>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="scoreImpact"></div>
+                                </div>
+                                <span id="scoreImpactValue">--</span>
+                            </div>
+                            <div class="score-item">
+                                <span>Completeness</span>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="scoreCompleteness"></div>
+                                </div>
+                                <span id="scoreCompletenessValue">--</span>
+                            </div>
+                            <div class="score-item">
+                                <span>ATS Compatibility</span>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="scoreATS"></div>
+                                </div>
+                                <span id="scoreATSValue">--</span>
+                            </div>
+                        </div>
+
+                        <div class="analysis-section">
+                            <h4>💪 Strengths</h4>
+                            <ul id="strengthsList"></ul>
+                        </div>
+
+                        <div class="analysis-section">
+                            <h4>🎯 Areas for Improvement</h4>
+                            <ul id="improvementsList"></ul>
+                        </div>
+
+                        <div class="analysis-section">
+                            <h4>🚨 Critical Recommendations</h4>
+                            <ul id="criticalList"></ul>
+                        </div>
+
+                        <div class="analysis-section">
+                            <h4>💡 Suggested Enhancements</h4>
+                            <ul id="suggestedList"></ul>
+                        </div>
+
+                        <div class="analysis-section">
+                            <h4>🔑 Missing Keywords</h4>
+                            <div id="keywordsList" class="keywords-container"></div>
+                        </div>
+
+                        <div class="analysis-summary" id="analysisSummary">
                         </div>
                     </div>
                 </div>

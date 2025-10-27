@@ -882,3 +882,185 @@ input:focus, textarea:focus, select:focus {
     margin-bottom: 2.5rem;
 }
 
+/* Button Group for Multiple Buttons */
+.button-group {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+}
+
+/* Resume Analysis Styles */
+.analysis-score {
+    display: flex;
+    justify-content: center;
+    margin: 2rem 0;
+}
+
+.score-circle {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: conic-gradient(#48bb78 0%, #e2e8f0 0%);
+    padding: 10px;
+    position: relative;
+}
+
+.score-circle::before {
+    content: '';
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    background: white;
+    border-radius: 50%;
+    z-index: 0;
+}
+
+.score-value {
+    font-size: 3rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    z-index: 1;
+}
+
+.score-label {
+    font-size: 0.9rem;
+    color: #718096;
+    font-weight: 600;
+    z-index: 1;
+}
+
+.score-breakdown {
+    margin: 2rem 0;
+}
+
+.score-breakdown h4 {
+    font-size: 1.1rem;
+    color: #2d3748;
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+.score-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.score-item > span:first-child {
+    min-width: 140px;
+    font-size: 0.9rem;
+    color: #4a5568;
+    font-weight: 600;
+}
+
+.score-bar {
+    flex: 1;
+    height: 24px;
+    background: #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+}
+
+.score-fill {
+    height: 100%;
+    background: #48bb78;
+    border-radius: 12px;
+    transition: width 0.5s ease;
+}
+
+.score-item > span:last-child {
+    min-width: 35px;
+    text-align: right;
+    font-weight: 700;
+    color: #2d3748;
+}
+
+.analysis-section {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: #f7fafc;
+    border-radius: 12px;
+    border-left: 4px solid #667eea;
+}
+
+.analysis-section h4 {
+    font-size: 1rem;
+    color: #2d3748;
+    margin-bottom: 0.75rem;
+    font-weight: 700;
+}
+
+.analysis-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.analysis-section li {
+    padding: 0.5rem 0;
+    color: #4a5568;
+    line-height: 1.6;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.analysis-section li:last-child {
+    border-bottom: none;
+}
+
+.keywords-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.keyword-tag {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.analysis-summary {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    border-radius: 12px;
+    border: 2px solid #667eea;
+}
+
+.analysis-summary p {
+    color: #2d3748;
+    line-height: 1.7;
+    margin: 0;
+}
+
+.analysis-summary strong {
+    color: #667eea;
+}
